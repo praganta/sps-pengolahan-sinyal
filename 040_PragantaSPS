@@ -1,0 +1,158 @@
+import tkinter as tk
+from tkinter import ttk
+import numpy as np
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
+from tkinter import PhotoImage
+
+# Fungsi DFT
+def compute_dft(signal, fs):
+    dft = np.fft.fft(signal)
+    freq = np.fft.fftfreq(len(signal), 1/fs)
+    magnitude = np.abs(dft)
+    return freq[:len(freq)//2], magnitude[:len(magnitude)//2]
+
+# Fungsi untuk memperbarui plot
+def update_plot():
+    sensor_index = sensor_select.current()
+    original, _, title, _ = sensor_data[sensor_index]
+
+    noise_amplitude = noise_amp_slider.get()
+    noise_frequency = noise_freq_slider.get()
+    noise_signal = noise_amplitude * np.sin(2 * np.pi * noise_frequency * t)
+
+    operation = operation_var.get()
+    if operation == "Add":
+        result = original + noise_signal
+    elif operation == "Multiply":
+        result = original * noise_signal
+    elif operation == "Convolve":
+        result = np.convolve(original, noise_signal, mode='same')
+    else:
+        result = original
+
+    # Perbarui plot Original Signal
+    axs[0, 0].cla()
+    axs[0, 0].plot(t, original, label="Original Signal", color="blue")
+    axs[0, 0].set_title(f"{title} - Original Signal")
+    axs[0, 0].grid(True)
+
+    # Perbarui plot Noise Signal
+    axs[0, 1].cla()
+    axs[0, 1].plot(t, noise_signal, label="Noise Signal", color="green")
+    axs[0, 1].set_title("Noise Signal")
+    axs[0, 1].grid(True)
+
+    # Perbarui plot Result of Operation
+    axs[1, 0].cla()
+    axs[1, 0].plot(t, result, label="Result of Operation", color="orange")
+    axs[1, 0].set_title("Result of Operation")
+    axs[1, 0].grid(True)
+
+    # Perbarui plot DFT Result
+    axs[1, 1].cla()
+    freq, magnitude = compute_dft(result, sampling_rate)
+    axs[1, 1].stem(freq, magnitude, markerfmt="o", basefmt=" ", linefmt="red", label="DFT Result")
+    axs[1, 1].set_title("DFT Result")
+    axs[1, 1].grid(True)
+
+    canvas.draw()
+
+# Fungsi untuk mereset slider dan operasi
+def reset():
+    noise_amp_slider.set(0)
+    noise_freq_slider.set(0)
+    operation_var.set("None")
+    update_plot()
+
+# Parameter sinyal
+duration = 10  # Durasi (detik)
+sampling_rate = 500  # Sampling rate tinggi (Hz)
+t = np.linspace(0, duration, int(sampling_rate * duration))
+
+# Data sensor
+freq_disturbance = 50
+disturbance = np.sin(2 * np.pi * freq_disturbance * t)
+
+suhu_lm35 = 25 + 2 * np.sin(2 * np.pi * 0.5 * t) + disturbance
+kelembapan_bme = 60 + 5 * np.sin(2 * np.pi * 0.5 * t) + disturbance
+tekanan_bme = 1000 + 10 * np.sin(2 * np.pi * 0.1 * t) + disturbance
+kapasitas_fdc1004 = 500 + 20 * np.sin(2 * np.pi * 0.2 * t) + disturbance
+curah_hujan = 5 + 2 * np.sin(2 * np.pi * 0.05 * t) + disturbance
+
+sensor_data = [
+    (suhu_lm35, None, 'Suhu LM35 (°C)', None),
+    (kelembapan_bme, None, 'Kelembapan BME280 (%)', None),
+    (tekanan_bme, None, 'Tekanan BME280 (hPa)', None),
+    (kapasitas_fdc1004, None, 'Kapasitas FDC1004 (pF)', None),
+    (curah_hujan, None, 'Curah Hujan (mm)', None)
+]
+
+# GUI dengan Tkinter
+root = tk.Tk()
+root.title("Signal Processing - Game Mode")
+root.geometry("1000x800")
+
+# Background gambar
+def set_background():
+    bg_img = PhotoImage(file="background.png")  # Pastikan file ini ada di direktori yang sama
+    bg_label = tk.Label(root, image=bg_img)
+    bg_label.image = bg_img
+    bg_label.place(relwidth=1, relheight=1)
+
+# Tambahkan background jika file tersedia
+try:
+    set_background()
+except:
+    pass
+
+# Heading gaya game
+heading = tk.Label(root, text="Signal Processing - Interactive Mode", font=("Comic Sans MS", 20, "bold"), fg="yellow", bg="black")
+heading.pack(pady=10)
+
+# Dropdown untuk memilih sensor
+sensor_label = ttk.Label(root, text="Select Sensor:", font=("Comic Sans MS", 12))
+sensor_label.pack()
+sensor_select = ttk.Combobox(root, values=[data[2] for data in sensor_data], state="readonly")
+sensor_select.current(0)
+sensor_select.pack(pady=5)
+sensor_select.bind("<<ComboboxSelected>>", lambda e: update_plot())
+
+# Slider untuk noise amplitude
+noise_amp_label = ttk.Label(root, text="Noise Amplitude (0-5):", font=("Comic Sans MS", 12))
+noise_amp_label.pack()
+noise_amp_slider = ttk.Scale(root, from_=0, to=5, orient="horizontal", command=lambda e: update_plot())
+noise_amp_slider.pack(pady=5)
+
+# Slider untuk noise frequency
+noise_freq_label = ttk.Label(root, text="Noise Frequency (Hz, 0-50):", font=("Comic Sans MS", 12))
+noise_freq_label.pack()
+noise_freq_slider = ttk.Scale(root, from_=0, to=50, orient="horizontal", command=lambda e: update_plot())
+noise_freq_slider.pack(pady=5)
+
+# Pilihan operasi dengan gaya game
+operation_var = tk.StringVar(value="None")
+operations_frame = ttk.Frame(root)
+operations_frame.pack(pady=10)
+operation_label = ttk.Label(operations_frame, text="Signal Operation:", font=("Comic Sans MS", 12))
+operation_label.pack(side="left", padx=5)
+for operation in ["None", "Add", "Multiply", "Convolve"]:
+    button = ttk.Radiobutton(operations_frame, text=operation, value=operation, variable=operation_var, command=update_plot)
+    button.pack(side="left", padx=5)
+
+# Tombol reset dengan gaya game
+reset_button = ttk.Button(root, text="Reset", command=reset, style="Accent.TButton")
+reset_button.pack(pady=10)
+
+# Matplotlib Figure
+fig, axs = plt.subplots(2, 2, figsize=(10, 8))
+plt.subplots_adjust(hspace=0.5, wspace=0.4)
+canvas = FigureCanvasTkAgg(fig, master=root)
+canvas_widget = canvas.get_tk_widget()
+canvas_widget.pack()
+
+# Plot awal
+update_plot()
+
+# Jalankan aplikasi
+root.mainloop()
